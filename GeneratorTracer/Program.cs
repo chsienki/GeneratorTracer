@@ -19,7 +19,7 @@ using var session = new TraceEventSession("Microsoft-CodeAnalysis-Generators-Tra
 Console.CancelKeyPress += (s, e) => session.Dispose();
 
 // capture the generator driver run time
-session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-General", "GeneratorDriverRunTime", (TraceEvent data) =>
+session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-General", "GeneratorDriverRunTime/Stop", (TraceEvent data) =>
 {
     // We store the overall execution time in the first slot of the info.
     EnsureProcessSlot(data.ProcessID);
@@ -27,7 +27,7 @@ session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-Gener
 });
 
 // capture the individual generator run times
-session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-General", "SingleGeneratorRunTime", (TraceEvent data) =>
+session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-General", "SingleGeneratorRunTime/Stop", (TraceEvent data) =>
 {
     EnsureProcessSlot(data.ProcessID);
 
