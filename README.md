@@ -11,3 +11,4 @@ Run as administrator. Open Visual Studio / `dotnet build` to begin collecting da
 
 ## Screenshots
 
+![Screenshot showing live data](screenshots/running.png)
