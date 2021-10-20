@@ -10,7 +10,7 @@ if (!(TraceEventSession.IsElevated() ?? false))
     return;
 }
 
-var generatorTimingInfo = new Dictionary<int, List<GeneratorInfo>>();
+var generatorTimingInfo = new Dictionary<int, ProcessInfo>();
 
 // create a new trace session
 using var session = new TraceEventSession("Microsoft-CodeAnalysis-Generators-Trace-Session");
@@ -23,7 +23,7 @@ session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-Gener
 {
     // We store the overall execution time in the first slot of the info.
     EnsureProcessSlot(data.ProcessID);
-    generatorTimingInfo[data.ProcessID][0].executionTimes.Add((long)data.PayloadByName("elapsedTicks"));
+    generatorTimingInfo[data.ProcessID].generators[0].executionTimes.Add((long)data.PayloadByName("elapsedTicks"));
 });
 
 // capture the individual generator run times
@@ -35,11 +35,13 @@ session.Source.Dynamic.AddCallbackForProviderEvent("Microsoft-CodeAnalysis-Gener
     var assemblyPath = (string)data.PayloadByName("assemblyPath");
     var ticks = (long)data.PayloadByName("elapsedTicks");
 
-    var info = generatorTimingInfo[data.ProcessID].SingleOrDefault(i => i.name == generatorName && i.assembly == assemblyPath);
+    var processInfo = generatorTimingInfo[data.ProcessID];
+
+    var info = processInfo.generators.SingleOrDefault(i => i.name == generatorName && i.assembly == assemblyPath);
     if (info is null)
     {
         info = new GeneratorInfo(generatorName, assemblyPath, new List<long>() { });
-        generatorTimingInfo[data.ProcessID].Add(info);
+        processInfo.generators.Add(info);
     }
 
     info.executionTimes.Add((long)data.PayloadByName("elapsedTicks"));
@@ -54,7 +56,9 @@ void EnsureProcessSlot(int processID)
 {
     if (!generatorTimingInfo.ContainsKey(processID))
     {
-        generatorTimingInfo[processID] = new List<GeneratorInfo>() { new GeneratorInfo("GeneratorDriver", "", new List<long>() { }) };
+        var processName = Process.GetProcessById(processID).ProcessName;
+
+        generatorTimingInfo[processID] = new ProcessInfo(processName, new List<GeneratorInfo>() { new GeneratorInfo("GeneratorDriver", "", new List<long>() { }) });
     }
 }
 
@@ -75,7 +79,7 @@ async Task RenderData()
         table.AddColumn("PIDs");
 
 
-        var pidGrouped = generatorTimingInfo.SelectMany(e => e.Value.Skip(1).Select(g => new { g.name, g.assembly, pid = e.Key })).GroupBy(g => g.assembly + g.name).Select(g => new { name = g.First().name, assembly = g.First().assembly, pids = g.Select(g2 => g2.pid) });
+        var pidGrouped = generatorTimingInfo.SelectMany(e => e.Value.generators.Skip(1).Select(g => new { g.name, g.assembly, pid = e.Key })).GroupBy(g => g.assembly + g.name).Select(g => new { name = g.First().name, assembly = g.First().assembly, pids = g.Select(g2 => g2.pid) });
         foreach (var group in pidGrouped)
         {
             table.AddRow(group.name, group.assembly, string.Join(",", group.pids));
@@ -85,7 +89,7 @@ async Task RenderData()
         WriteLine("");
         foreach (var pid in generatorTimingInfo)
         {
-            WriteLine($"PID {pid.Key}:");
+            WriteLine($"{pid.Value.name} (PID {pid.Key}):");
 
             table = new Table();
             table.AddColumn("Generator");
@@ -94,9 +98,9 @@ async Task RenderData()
             table.AddColumn("Cumulative Time");
             table.AddColumn("Count");
 
-            RenderRow(pid.Value[0]);
+            RenderRow(pid.Value.generators[0]);
             table.AddEmptyRow();
-            foreach (var entry in pid.Value.Skip(1))
+            foreach (var entry in pid.Value.generators.Skip(1))
             {
                 RenderRow(entry);
             }
@@ -123,3 +127,4 @@ async Task RenderData()
 }
 
 record GeneratorInfo(string name, string assembly, List<long> executionTimes);
+record ProcessInfo(string name, List<GeneratorInfo> generators);
